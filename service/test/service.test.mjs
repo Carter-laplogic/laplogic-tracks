@@ -41,12 +41,15 @@ test('upload checks', () => {
 
 // ─── the upload flow against a pretend GitHub ────────────────────────────────
 
-function fakeGitHub(layouts) {
+// layoutsFile: the repo has layouts.json (built since circuits were added); without it the
+// service falls back to tracks.json
+function fakeGitHub(layouts, { layoutsFile = true } = {}) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(url), method = init.method || 'GET';
     calls.push(`${method} ${u.pathname}`);
     const json = (status, body) => new Response(JSON.stringify(body), { status });
+    if (u.pathname.endsWith('/contents/layouts.json')) return layoutsFile ? json(200, { layouts }) : json(404, {});
     if (u.pathname.endsWith('/contents/tracks.json')) return json(200, { venues: [], layouts });
     if (method === 'GET' && u.pathname.includes('/contents/layouts/')) return json(404, {});
     if (method === 'PUT' && u.pathname.includes('/contents/layouts/')) return json(201, {});
@@ -69,6 +72,15 @@ test('a new layout at a known venue goes live without asking', async () => {
   assert.equal(b.status, 'live');
   assert.equal(b.id, 'mcc-national');
   assert.ok(calls.includes('PUT /repos/x/laplogic-tracks/contents/layouts/mcc-national.json'));
+  assert.ok(calls.includes('GET /repos/x/laplogic-tracks/contents/layouts.json'));
+  assert.ok(!calls.includes('GET /repos/x/laplogic-tracks/contents/tracks.json')); // not the megabytes of venues
+});
+
+test('a repo without layouts.json: the duplicate check reads tracks.json', async () => {
+  const calls = fakeGitHub([acw, national], { layoutsFile: false });
+  const r = await worker.fetch(post(upload({ ...acw, name: 'MCC again', path: redrive(acw.path) })), env, {});
+  assert.equal(r.status, 409);
+  assert.ok(calls.includes('GET /repos/x/laplogic-tracks/contents/tracks.json'));
 });
 
 test('a track that is already there: 409 with the matches, nothing written', async () => {

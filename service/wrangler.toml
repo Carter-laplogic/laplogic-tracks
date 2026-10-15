@@ -8,7 +8,9 @@ GITHUB_REPO = "Carter-laplogic/laplogic-tracks"   # owner/repo of this repositor
 GITHUB_BRANCH = "main"
 UPLOADS_PER_HOUR = "10"                         # per address, with the RATE_LIMIT namespace below
 
-# Lap Logic uses https://tracks.laplogic.co (laplogic.co's DNS must be on Cloudflare):
+# Lap Logic uses https://laplogic-tracks.laplogic.workers.dev. For tracks.laplogic.co instead
+# (laplogic.co's DNS must be on Cloudflare first), uncomment this, deploy, and change Lap Logic's
+# PublicTrackDb.DefaultServiceUrl:
 # routes = [{ pattern = "tracks.laplogic.co", custom_domain = true }]
 
 # Upload rate limit: npx wrangler kv namespace create RATE_LIMIT, then paste its id here.

@@ -20,6 +20,7 @@ globalThis.fetch = async (url, init = {}) => {
   const u = new URL(url), method = init.method || 'GET';
   const json = (status, body) => new Response(JSON.stringify(body), { status });
   if (u.pathname.endsWith('/contents/tracks.json')) return json(200, db);
+  if (u.pathname.endsWith('/contents/layouts.json')) return json(200, { layouts: db.layouts });
   const m = u.pathname.match(/\/contents\/layouts\/(.+)\.json$/);
   if (m && method === 'GET') return json(db.layouts.some(l => l.id === m[1]) ? 200 : 404, {});
   if (m && method === 'PUT') {

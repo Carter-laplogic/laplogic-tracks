@@ -59,10 +59,16 @@ function b64(text) {
   return btoa(s);
 }
 
-/** The current database straight from the repo (not the minute-old cached copy). */
+/**
+ * The current layouts straight from the repo (not the minute-old cached copy): layouts.json,
+ * which leaves out the venues (tracks.json is megabytes with every circuit, too much to parse
+ * on every upload); tracks.json for a repo built before layouts.json existed.
+ */
 async function currentDb(env) {
-  const r = await gh(env, `/contents/tracks.json?ref=${env.GITHUB_BRANCH || 'main'}`, { raw: true });
-  if (!r.ok) throw new Error(`GitHub ${r.status} reading tracks.json`);
+  const ref = env.GITHUB_BRANCH || 'main';
+  let r = await gh(env, `/contents/layouts.json?ref=${ref}`, { raw: true });
+  if (r.status === 404) r = await gh(env, `/contents/tracks.json?ref=${ref}`, { raw: true });
+  if (!r.ok) throw new Error(`GitHub ${r.status} reading the layouts`);
   return r.json();
 }
 

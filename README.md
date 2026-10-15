@@ -1,7 +1,8 @@
 # Lap Logic tracks
 
-The public track database behind Lap Logic and the Lap Logger: every karting venue in
-OpenStreetMap, plus the start/finish lines and lap paths that drivers share from Lap Logic.
+The public track database behind Lap Logic and the Lap Logger: every kart track and race
+circuit in OpenStreetMap, plus the start/finish lines and lap paths that drivers share from Lap
+Logic.
 Lap Logic downloads `tracks.json`, shows it on its Tracks page, and puts it on the logger's SD
 card so laps are timed at any track with no setup.
 
@@ -9,9 +10,10 @@ card so laps are timed at any track with no setup.
 
 | Path | What |
 |---|---|
-| `venues.json` | Karting venues from OpenStreetMap (ODbL). Refresh: `python tools/build_track_db.py --fetch` in ll01-firmware, then `tools/seed.py` (keeps existing layouts) |
+| `venues.json` | Kart tracks and race circuits from OpenStreetMap (ODbL), each with `"kind": "karting"` or `"circuit"`. Refresh: `python tools/build_track_db.py --fetch` in ll01-firmware, then `tools/seed.py` (keeps existing layouts) |
 | `layouts/<id>.json` | One track layout each: name, start/finish line (`sf`: lat, lon, heading), `half_width_m`, `length_m`, `path` (one lap, a point every ~5 m, starting at the line), `source`, `uploaded`, `by` |
 | `tracks.json` | Built from the two above by `tools/build.py` (the GitHub Action does it on every change). Do not edit |
+| `layouts.json` | The same layouts without the venues, also built: the upload service reads this one for its duplicate check (`tracks.json` is megabytes, too much to parse on every upload) |
 | `tools/` | `build.py` (check + build), `same_layout.py` (the duplicate rule), `seed.py` (one-off start from ll01-firmware) |
 | `service/` | The upload service: a Cloudflare Worker that adds uploads to `layouts/` |
 
@@ -31,7 +33,9 @@ card so laps are timed at any track with no setup.
 the same way round, and their lengths agree within 8 %. Different layouts of one venue (MCC ACW and
 MCC National share the start/finish line) always have a section only one of them uses, so they never
 count as duplicates and never ask; a reversed layout is different too. Lap Logic groups sessions by
-layout with the same rule (`Helpers/TrackLayouts.cs`).
+layout with the same rule (`Helpers/TrackLayouts.cs`). The same tolerances hold on car circuits:
+laps of Bathurst in four different cars (iRacing, real coordinates) all lie 100 % within 12 m of
+each other, as do Road Atlanta and Daytona.
 
 ## Deploying the upload service
 
@@ -56,15 +60,17 @@ You need a GitHub account (for this repo) and a free Cloudflare account (for the
    npx wrangler deploy
    ```
    Set `GITHUB_REPO` in `wrangler.toml` to `YOUR-GITHUB-NAME/laplogic-tracks` first.
-4. **The address Lap Logic uses**, `https://tracks.laplogic.co`: with laplogic.co's DNS on
-   Cloudflare, uncomment the `routes` line in `wrangler.toml` and deploy again. (Until then, set the
-   environment variable `LAPLOGIC_TRACKS_URL` to the `*.workers.dev` address wrangler printed.)
-5. Check: open `https://tracks.laplogic.co/tracks.json` in a browser.
+4. **The address Lap Logic uses** is `https://laplogic-tracks.laplogic.workers.dev`
+   (`PublicTrackDb.DefaultServiceUrl`; `LAPLOGIC_TRACKS_URL` overrides it). For
+   `https://tracks.laplogic.co` instead, laplogic.co's DNS has to be on Cloudflare (it is at
+   GoDaddy as of 2026-10-15): then uncomment the `routes` line in `wrangler.toml`, deploy again and
+   change the default in Lap Logic.
+5. Check: open `https://laplogic-tracks.laplogic.workers.dev/tracks.json` in a browser.
 
 ## Working on it
 
 ```
 python tools/build.py --check             check the layouts
-python tools/build.py                     rebuild tracks.json
+python tools/build.py                     rebuild tracks.json and layouts.json
 node --test service/test/service.test.mjs test the service (Node 20+, no packages)
 ```

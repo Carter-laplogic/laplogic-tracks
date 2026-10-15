@@ -4,13 +4,16 @@
     python tools/build.py --check    check only (CI on pull requests)
 
 Inputs
-  venues.json       karting venues from OpenStreetMap (c) OpenStreetMap contributors, ODbL 1.0
-                    (refreshed with ll01-firmware/tools/build_track_db.py --fetch)
+  venues.json       kart tracks and race circuits from OpenStreetMap ("kind": karting /
+                    circuit), (c) OpenStreetMap contributors, ODbL 1.0
+                    (refreshed with ll01-firmware/tools/build_track_db.py --fetch, then seed.py)
   layouts/*.json    one start/finish line + lap path per track layout (uploads land here)
 
 Output
   tracks.json       {attribution, generated, venues, layouts}; layouts carry the path so Lap
                     Logic can show them and check uploads for duplicates
+  layouts.json      {generated, layouts}: the same layouts without the venues, for the upload
+                    service's duplicate check (tracks.json is megabytes with every circuit)
 
 A layout that matches another one (same_layout.py) is reported but not an error: the upload
 service holds those for review, and a reviewer may keep one on purpose (a better line).
@@ -40,8 +43,13 @@ def dist_m(lat1, lon1, lat2, lon2):
     return 2 * 6371008.8 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+# letters that have no accent to strip (NFKD leaves them as they are)
+TRANSLIT = str.maketrans({"ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE", "ß": "ss", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
+                          "þ": "th", "Þ": "Th", "ð": "d", "Ð": "D", "œ": "oe", "Œ": "OE", "ı": "i", "ħ": "h", "Ħ": "H"})
+
+
 def ascii_name(s):
-    s = unicodedata.normalize("NFKD", s or "")
+    s = unicodedata.normalize("NFKD", (s or "").translate(TRANSLIT))
     s = "".join(c for c in s if not unicodedata.combining(c))
     s = "".join(c if 32 <= ord(c) < 127 else " " for c in s)
     return re.sub(r"\s+", " ", s).strip()
@@ -58,6 +66,17 @@ def short_name(name, max_len=31):
         name = shorter
     cut = name[:max_len]
     return cut.rsplit(" ", 1)[0] if " " in cut[10:] else cut
+
+
+def venue_at(venues, lat, lon):
+    """The venue at a point, as the logger picks it: of those that contain it the smallest
+    (a kart track in a circuit's infield), else the nearest within its radius + 300 m."""
+    near = [(dist_m(v["lat"], v["lon"], lat, lon), v) for v in venues if abs(v["lat"] - lat) < 0.06]
+    inside = [v for d, v in near if d <= v["radius_m"]]
+    if inside:
+        return min(inside, key=lambda v: v["radius_m"])
+    near = [(d, v) for d, v in near if d <= v["radius_m"] + 300]
+    return min(near, key=lambda x: x[0])[1] if near else None
 
 
 def check_layout(path, l, errors):
@@ -120,9 +139,8 @@ def main():
             t = build_trace(l["path"])
             traces[l["id"]] = t
             l["length_m"] = round(t["length_m"])
-        lat, lon = l["sf"]["lat"], l["sf"]["lon"]
-        near = [v for v in venues if dist_m(v["lat"], v["lon"], lat, lon) <= v["radius_m"] + 300]
-        l["venue"] = min(near, key=lambda v: dist_m(v["lat"], v["lon"], lat, lon))["id"] if near else ""
+        v = venue_at(venues, l["sf"]["lat"], l["sf"]["lon"])
+        l["venue"] = v["id"] if v else ""
         layouts.append(l)
 
     # layouts that look like the same track (reported only)
@@ -136,19 +154,20 @@ def main():
     if errors:
         print("\n".join(errors))
         sys.exit(1)
-    print(f"{len(venues)} venues, {len(layouts)} layouts OK")
+    karts = sum(1 for v in venues if v.get("kind", "karting") == "karting")
+    print(f"{len(venues)} venues ({karts} karting, {len(venues) - karts} circuits), {len(layouts)} layouts OK")
     if a.check:
         return
     order = ["id", "name", "short", "venue", "sf", "half_width_m", "length_m", "source", "uploaded", "by", "path"]
-    db = {
-        "attribution": ATTRIBUTION,
-        "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "venues": venues,
-        "layouts": [{k: l[k] for k in order if k in l} for l in sorted(layouts, key=lambda l: l["id"])],
-    }
+    generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = [{k: l[k] for k in order if k in l} for l in sorted(layouts, key=lambda l: l["id"])]
+    db = {"attribution": ATTRIBUTION, "generated": generated, "venues": venues, "layouts": out}
     with open(os.path.join(ROOT, "tracks.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(db, f, ensure_ascii=False, separators=(",", ":"))
-    print("wrote tracks.json")
+    with open(os.path.join(ROOT, "layouts.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump({"attribution": ATTRIBUTION, "generated": generated, "layouts": out}, f,
+                  ensure_ascii=False, separators=(",", ":"))
+    print("wrote tracks.json, layouts.json")
 
 
 if __name__ == "__main__":
