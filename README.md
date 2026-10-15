@@ -1,6 +1,6 @@
 # Lap Logic tracks
 
-The public track database behind Lap Logic and the LL-01 Lap Logger: every karting venue in
+The public track database behind Lap Logic and the Lap Logger: every karting venue in
 OpenStreetMap, plus the start/finish lines and lap paths that drivers share from Lap Logic.
 Lap Logic downloads `tracks.json`, shows it on its Tracks page, and puts it on the logger's SD
 card so laps are timed at any track with no setup.
