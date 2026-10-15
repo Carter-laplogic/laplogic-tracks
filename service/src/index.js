@@ -6,10 +6,13 @@
 //        201 { status: "live", id }          a new track or a new layout: it is in the database now
 //        409 { duplicates: [...] }           it looks like a track already there; nothing saved
 //        202 { status: "review", id, pr }   sent again with confirm_duplicate: held for review (a pull request)
-//        400 / 429 { error }
+//   POST /upload with replace: "<layout id>"   the same track as that layout, with a better line or
+//        lap: a pull request that updates the layout's file (202 as above; 400 if it is not the
+//        same track, 404 if the layout is gone)
+//        400 / 404 / 429 { error }
 //
 // It holds the GitHub token, so Lap Logic never does; the token can only write this repo.
-import { cleanUpload, findDuplicates, slug } from './layouts.js';
+import { buildTrace, cleanUpload, distM, findDuplicates, sameLayout, slug } from './layouts.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
 const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -124,6 +127,7 @@ async function upload(request, env) {
   if (!(await allowed(env, ip))) return reply(429, { error: 'Too many uploads from here this hour. Try again later.' });
 
   const db = await currentDb(env);
+  if (body.replace != null) return await replaceLayout(env, db, String(body.replace), layout);
   const dups = findDuplicates(layout.trace, db.layouts);
   if (dups.length && !body.confirm_duplicate) return reply(409, { duplicates: dups.map(summary) });
 
@@ -157,6 +161,41 @@ async function upload(request, env) {
       head: ref,
       base: branch,
       body: `Uploaded from Lap Logic${layout.by ? ` by ${layout.by}` : ''}. The uploader was shown these tracks and said theirs is different:\n\n${list}\n\nMerge to publish it, close to drop it.`,
+    }),
+  });
+  return reply(202, { status: 'review', id, pr: pr.html_url });
+}
+
+/** A better line / lap for a layout already there: a pull request that updates its file. */
+async function replaceLayout(env, db, id, layout) {
+  const target = (db.layouts || []).find(l => l.id === id);
+  if (!target) return reply(404, { error: 'That track is not in the public database any more.' });
+  const theirs = Array.isArray(target.path) && target.path.length >= 20 ? buildTrace(target.path) : null;
+  const same = theirs ? sameLayout(layout.trace, theirs).same
+                      : distM(layout.sf.lat, layout.sf.lon, target.sf.lat, target.sf.lon) < 100; // no lap to compare: the line
+  if (!same) return reply(400, { error: `That is not the same track as ${target.name}. Send it as a new track instead.` });
+
+  delete layout.trace;
+  const file = { id, ...layout, name: target.name, uploaded: new Date().toISOString().slice(0, 10) };
+  const branch = env.GITHUB_BRANCH || 'main';
+  const head = await ghJson(env, `/git/ref/heads/${branch}`);
+  const ref = `update/${id}-${Date.now().toString(36)}`;
+  await ghJson(env, '/git/refs', { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${ref}`, sha: head.object.sha }) });
+  const old = await gh(env, `/contents/layouts/${id}.json?ref=${ref}`);
+  const sha = old.ok ? (await old.json()).sha : undefined;
+  await ghJson(env, `/contents/layouts/${id}.json`, {
+    method: 'PUT',
+    body: JSON.stringify({ message: `Update ${target.name}${layout.by ? ` (from ${layout.by})` : ''}`, content: b64(JSON.stringify(file) + '\n'), branch: ref, ...(sha ? { sha } : {}) }),
+  });
+  const was = target.length_m ? `${target.length_m} m` : 'no lap';
+  const pr = await ghJson(env, '/pulls', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `Update: ${target.name}`,
+      head: ref,
+      base: branch,
+      body: `A new start/finish line and lap for \`${id}\` from Lap Logic${layout.by ? `, sent by ${layout.by}` : ''} ` +
+            `(${layout.length_m} m; the public one: ${was}). It is the same track by the duplicate rule.\n\nMerge to publish it, close to keep the old one.`,
     }),
   });
   return reply(202, { status: 'review', id, pr: pr.html_url });

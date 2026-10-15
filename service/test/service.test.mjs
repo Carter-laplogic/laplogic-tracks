@@ -103,3 +103,23 @@ test('confirmed duplicate: held for review as a pull request', async () => {
   assert.match(b.pr, /pull\/1$/);
   assert.ok(calls.includes('POST /repos/x/laplogic-tracks/pulls'));
 });
+
+test('an update of a track that is there: a pull request that replaces its file', async () => {
+  const calls = fakeGitHub([acw, national]);
+  const r = await worker.fetch(post(upload({ ...acw, name: 'MCC ACW (better line)', path: redrive(acw.path) }, { replace: 'mcc-acw' })), env, {});
+  assert.equal(r.status, 202);
+  const b = await r.json();
+  assert.equal(b.status, 'review');
+  assert.equal(b.id, 'mcc-acw');
+  assert.ok(calls.includes('PUT /repos/x/laplogic-tracks/contents/layouts/mcc-acw.json'));
+  assert.ok(calls.includes('POST /repos/x/laplogic-tracks/pulls'));
+});
+
+test('an update with a different track is refused, an update of a track that is gone is 404', async () => {
+  fakeGitHub([acw, national]);
+  let r = await worker.fetch(post(upload(national, { replace: 'mcc-acw' })), env, {});
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /not the same track/);
+  r = await worker.fetch(post(upload(acw, { replace: 'no-such-track' })), env, {});
+  assert.equal(r.status, 404);
+});

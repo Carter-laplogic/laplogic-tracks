@@ -27,6 +27,9 @@ card so laps are timed at any track with no setup.
 4. **Looks like a track already there**: nothing is saved; Lap Logic shows the uploader the matching
    tracks so they can check. If they say theirs is different, it is uploaded as a **pull request**
    for someone to look at before it goes public.
+5. **A better line or lap for a track that is there** (Lap Logic: *Update with my track*, or "update
+   it with mine" in step 4): sent with `replace: "<layout id>"`. If it is the same track by the rule
+   below, the service opens a **pull request** that replaces that layout's file; merge it to publish.
 
 **Same track or not:** two laps are the same layout when each lies on the other almost everywhere
 (at least 97 % of the points within 12 m and no stretch longer than 30 m off it), they are driven
