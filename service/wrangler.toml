@@ -4,7 +4,7 @@ main = "src/index.js"
 compatibility_date = "2024-09-23"
 
 [vars]
-GITHUB_REPO = "YOUR-GITHUB-NAME/laplogic-tracks"  # owner/repo of this repository
+GITHUB_REPO = "Carter-laplogic/laplogic-tracks"   # owner/repo of this repository
 GITHUB_BRANCH = "main"
 UPLOADS_PER_HOUR = "10"                         # per address, with the RATE_LIMIT namespace below
 
