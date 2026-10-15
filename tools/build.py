@@ -43,16 +43,41 @@ def dist_m(lat1, lon1, lat2, lon2):
     return 2 * 6371008.8 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-# letters that have no accent to strip (NFKD leaves them as they are)
-TRANSLIT = str.maketrans({"ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE", "ß": "ss", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
-                          "þ": "th", "Þ": "Th", "ð": "d", "Ð": "D", "œ": "oe", "Œ": "OE", "ı": "i", "ħ": "h", "Ħ": "H"})
+# letters that have no accent to strip (NFKD leaves them as they are), and Cyrillic and Greek
+# (many kart tracks in Eastern Europe are named only in Cyrillic: "Картодром" -> "Kartodrom")
+_TR = {"ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE", "ß": "ss", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
+       "þ": "th", "Þ": "Th", "ð": "d", "Ð": "D", "œ": "oe", "Œ": "OE", "ı": "i", "ħ": "h", "Ħ": "H"}
+_CYR = dict(zip("абвгдезийклмнопрстуфыэіґўј",
+                ["a", "b", "v", "g", "d", "e", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u",
+                 "f", "y", "e", "i", "g", "u", "j"]))
+_CYR.update({"ё": "yo", "ж": "zh", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch", "ъ": "", "ь": "",
+             "ю": "yu", "я": "ya", "ї": "yi", "є": "ye", "љ": "lj", "њ": "nj", "ћ": "c", "ђ": "dj", "џ": "dz"})
+_GRK = dict(zip("αβγδεζηικλμνξοπρσςτυφωάέήίόύώϊϋΐΰ",
+                ["a", "v", "g", "d", "e", "z", "i", "i", "k", "l", "m", "n", "x", "o", "p", "r", "s", "s", "t", "y",
+                 "f", "o", "a", "e", "i", "i", "o", "y", "o", "i", "y", "i", "y"]))
+_GRK.update({"θ": "th", "χ": "ch", "ψ": "ps"})
+for _src in (_CYR, _GRK):
+    for _k, _v in list(_src.items()):
+        if len(_k.upper()) == 1:  # "ΐ".upper() is two characters
+            _src[_k.upper()] = _v[:1].upper() + _v[1:]
+    _TR.update(_src)
+TRANSLIT = str.maketrans(_TR)
+
+
+def tidy_name(s):
+    """What is left of a name once it is ASCII: no quotes, no empty brackets, no dangling dashes."""
+    s = s.replace('"', " ")
+    s = re.sub(r"\(\s*[^A-Za-z0-9]*\s*\)|\[\s*[^A-Za-z0-9]*\s*\]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"^[\s\-,.;:/|]+|[\s\-,;:/|]+$", "", s)
+    return s
 
 
 def ascii_name(s):
     s = unicodedata.normalize("NFKD", (s or "").translate(TRANSLIT))
     s = "".join(c for c in s if not unicodedata.combining(c))
     s = "".join(c if 32 <= ord(c) < 127 else " " for c in s)
-    return re.sub(r"\s+", " ", s).strip()
+    return tidy_name(re.sub(r"\s+", " ", s).strip())
 
 
 def short_name(name, max_len=31):
