@@ -1,0 +1,12 @@
+{
+  "name": "laplogic-tracks-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/service.test.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

@@ -1,0 +1,4 @@
+service/node_modules/
+service/.wrangler/
+__pycache__/
+*.pyc

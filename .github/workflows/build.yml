@@ -1,0 +1,41 @@
+name: Tracks
+
+on:
+  push:
+    branches: [main]
+    paths: ["layouts/**", "venues.json", "tools/**", "service/**"]
+  pull_request:
+    paths: ["layouts/**", "venues.json", "tools/**", "service/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check the layouts
+        run: python tools/build.py --check
+
+      - name: Test the upload service
+        run: node --test service/test/service.test.mjs
+
+      # every upload is a commit to layouts/: rebuild the file Lap Logic downloads
+      - name: Rebuild tracks.json
+        if: github.event_name != 'pull_request'
+        run: |
+          python tools/build.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tracks.json
+          git diff --cached --quiet || git commit -m "Rebuild tracks.json"
+          git push
